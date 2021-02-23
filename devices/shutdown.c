@@ -20,7 +20,8 @@
 /* How to shut down when shutdown() is called. */
 static enum shutdown_type how = SHUTDOWN_NONE;
 
-static void print_stats (void);
+static void
+print_stats (void);
 
 /* Shuts down the machine in the way configured by
    shutdown_configure().  If the shutdown type is SHUTDOWN_NONE
@@ -58,8 +59,8 @@ shutdown_reboot (void)
 {
   printf ("Rebooting...\n");
 
-    /* See [kbd] for details on how to program the keyboard
-     * controller. */
+  /* See [kbd] for details on how to program the keyboard
+   * controller. */
   for (;;)
     {
       int i;
@@ -67,11 +68,11 @@ shutdown_reboot (void)
       /* Poll keyboard controller's status byte until
        * 'input buffer empty' is reported. */
       for (i = 0; i < 0x10000; i++)
-        {
-          if ((inb (CONTROL_REG) & 0x02) == 0)
-            break;
-          timer_udelay (2);
-        }
+	{
+	  if ((inb (CONTROL_REG) & 0x02) == 0)
+	    break;
+	  timer_udelay (2);
+	}
 
       timer_udelay (50);
 
@@ -99,6 +100,9 @@ shutdown_power_off (void)
   printf ("Powering off...\n");
   serial_flush ();
 
+  /* QEMU does not shutdown properly without this line */
+  outw (0xB004, 0x2000);
+
   /* This is a special power-off sequence supported by Bochs and
      QEMU, but not by physical hardware. */
   for (p = s; *p != '\0'; p++)
@@ -107,11 +111,12 @@ shutdown_power_off (void)
   /* This will power off a VMware VM if "gui.exitOnCLIHLT = TRUE"
      is set in its configuration file.  (The "pintos" script does
      that automatically.)  */
-  asm volatile ("cli; hlt" : : : "memory");
+  asm volatile("cli; hlt" : : : "memory");
 
   /* None of those worked. */
   printf ("still running...\n");
-  for (;;);
+  for (;;)
+    ;
 }
 
 /* Print statistics about Pintos execution. */
