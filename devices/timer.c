@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include <list.h>
 
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -33,6 +34,12 @@ static void
 real_time_sleep (int64_t num, int32_t denom);
 static void
 real_time_delay (int64_t num, int32_t denom);
+static bool
+sleep_compare (const struct list_elem *a, const struct list_elem *b,
+	       void *AUX UNUSED);
+
+/* List of all sleeping threads */
+static struct list sleeping_list;
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -41,6 +48,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleeping_list); /* Initialize the sleeping threads list */
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -88,16 +96,44 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+/* Comparator function for adding threads
+   to `sleeping_list`. Ensures addition in non-decreasing order */
+static bool
+sleep_compare (const struct list_elem *a, const struct list_elem *b,
+	       void *AUX UNUSED)
+{
+  struct thread *t1 = list_entry (a, struct thread, sleepelem);
+  struct thread *t2 = list_entry (b, struct thread, sleepelem);
+
+  if (t1->wakeup_time < t2->wakeup_time)
+    return true;
+
+  return false;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks)
 {
-  int64_t start = timer_ticks ();
+  if (ticks <= 0)
+    return;
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks)
-    thread_yield ();
+
+  /* Disable all interrupts to prevent race conditions */
+  enum intr_level old_level = intr_disable ();
+
+  /* Store the wakeup time for the current thread */
+  struct thread *curr = thread_current ();
+  curr->wakeup_time = timer_ticks () + ticks;
+
+  /* Inserts the current thread into `sleeping_list` in sorted order */
+  list_insert_ordered (&sleeping_list, &curr->sleepelem, sleep_compare, NULL);
+
+  thread_sleep (); /* Put the thread to sleep */
+
+  intr_set_level (old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -175,6 +211,26 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+
+  /* The list `sleeping_list` is sorted to ensure that we wouldn't
+     need to traverse the entire list to find the next thread to wake up. */
+  struct list_elem *iter;
+  for (iter = list_begin (&sleeping_list); iter != list_end (&sleeping_list);
+       iter = list_next (iter))
+    {
+      struct thread *curr = list_entry (iter, struct thread, sleepelem);
+      if (curr->wakeup_time <= ticks)
+	{
+	  curr->wakeup_time = 0;
+	  thread_wake (curr); /* Wake up the thread */
+	  list_remove (iter); /* Remove the thread from sleeping list */
+	}
+      else
+	{
+	  break;
+	}
+    }
+
   thread_tick ();
 }
 
@@ -227,14 +283,14 @@ real_time_sleep (int64_t num, int32_t denom)
   if (ticks > 0)
     {
       /* We're waiting for at least one full timer tick.  Use
-	 timer_sleep() because it will yield the CPU to other
-	 processes. */
+	   timer_sleep() because it will yield the CPU to other
+	   processes. */
       timer_sleep (ticks);
     }
   else
     {
       /* Otherwise, use a busy-wait loop for more accurate
-	 sub-tick timing. */
+	   sub-tick timing. */
       real_time_delay (num, denom);
     }
 }
