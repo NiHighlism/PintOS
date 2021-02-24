@@ -109,6 +109,10 @@ void thread_init(void)
   /* Set the value of load_avg to be 0 at boot */
   load_avg = 0;
 
+  /* Initialize updates to false */
+  is_recent_cpu_update = false;
+  is_mlfqs_priority_update = false;
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread();
   init_thread(initial_thread, "main", PRI_DEFAULT);
@@ -130,7 +134,7 @@ void thread_start(void)
     recalculate MLFQ priorities and fix them. Assign this thread to the
     `mlfqs_scheduler` function and give it max priority (PRI_MAX)
    */
-  thread_create("mlfqs_thread", PRI_MAX, mlfqs_scheduler, NULL);
+  //  thread_create("mlfqs_thread", PRI_MAX, mlfqs_scheduler, NULL);
 
   /* Start preemptive thread scheduling. */
   intr_enable();
@@ -144,6 +148,7 @@ void thread_start(void)
 void thread_tick(void)
 {
   struct thread *t = thread_current();
+  t->recent_cpu = t->recent_cpu + 1;
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -408,15 +413,14 @@ int thread_get_nice(void)
 /* Returns 100 times the system load average. */
 int thread_get_load_avg(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  return (load_avg * 100);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  struct thread *curr = thread_current();
+  return (curr->recent_cpu) * 100;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

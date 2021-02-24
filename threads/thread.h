@@ -154,6 +154,21 @@ struct thread
 */
 int load_avg;
 
+/*
+  Update the values of recent_cpu for all threads, when
+  timer_ticks() % TIMER_FREQ == 0. We iterate over all the
+  threads, update load_avg according to the given formula,
+  and then update recent_cpu for each thread accordingly
+*/
+bool is_recent_cpu_update;
+
+/*
+  Update the MLFQS priorities for all threads, every 4th tick. We
+  iterate over all threads and update their priorities using the formula
+  mentioned in the documentation
+*/
+bool is_mlfqs_priority_update;
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
