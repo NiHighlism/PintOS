@@ -34,12 +34,33 @@ static void
 real_time_sleep(int64_t num, int32_t denom);
 static void
 real_time_delay(int64_t num, int32_t denom);
+
+/* Custom defined prototypes and globals */
+
+/* List of all sleeping threads */
+static struct list sleeping_list;
+
+/* Comparator function for adding threads
+   to `sleeping_list`. Ensures addition in non-decreasing order */
 static bool
 sleep_compare(const struct list_elem *a, const struct list_elem *b,
               void *AUX UNUSED);
 
-/* List of all sleeping threads */
-static struct list sleeping_list;
+/* The minimum time for any thread to wake up. When value is greater or equal
+  to ticks, unblock the wakeup thread and awaken some threads */
+int64_t min_wakeup_time;
+
+/* The wakeup thread - Remains blocked except when it is unblocked in the `timer_interrupt` function */
+static struct thread *wakeup_thread;
+
+/* The function that the wakeup_thread is assigned to. Goes into an infinite
+loop until the timer_interrupt unblocks it, to awake a sleeping thread */
+static void waker(void *arg UNUSED);
+
+/* Iterate over the list of sleeping threads and wake up all those whose
+wakeup time is less than the min_wakeup_time. Then update the
+min_wakeup_time to the first thread whose wakeup_time is greater than ticks */
+void timer_wakeup(void);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -48,6 +69,10 @@ void timer_init(void)
   pit_configure_channel(0, 2, TIMER_FREQ);
   intr_register_ext(0x20, timer_interrupt, "8254 Timer");
   list_init(&sleeping_list); /* Initialize the sleeping threads list */
+
+  /* Create a wakeup_thread, setting the priority to max (PRI_MAX)) and
+  assign it to the waker function */
+  thread_create("wakeup_thread", PRI_MAX, waker, NULL);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -94,6 +119,19 @@ timer_elapsed(int64_t then)
   return timer_ticks() - then;
 }
 
+static bool
+sleep_compare(const struct list_elem *a, const struct list_elem *b,
+              void *AUX UNUSED)
+{
+  struct thread *t1 = list_entry(a, struct thread, sleepelem);
+  struct thread *t2 = list_entry(b, struct thread, sleepelem);
+
+  if (t1->wakeup_time < t2->wakeup_time)
+    return true;
+
+  return false;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void timer_sleep(int64_t ticks)
@@ -104,7 +142,18 @@ void timer_sleep(int64_t ticks)
   ASSERT(intr_get_level() == INTR_ON);
 
   int64_t wakeup_time = timer_ticks() + ticks;
-  thread_sleep_for_ticks(wakeup_time);
+  struct thread *curr = thread_current();
+
+  enum intr_level old_level = intr_disable();
+
+  curr->wakeup_time = wakeup_time;
+  min_wakeup_time = (wakeup_time < min_wakeup_time) ? wakeup_time : min_wakeup_time;
+
+  list_insert_ordered(&sleeping_list, &curr->sleepelem, sleep_compare, NULL);
+  thread_sleep();
+
+  // setting the interrupt to old level
+  intr_set_level(old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -176,7 +225,52 @@ timer_interrupt(struct intr_frame *args UNUSED)
 {
   ticks++;
 
+  if (ticks >= min_wakeup_time && wakeup_thread->status == THREAD_BLOCKED)
+  {
+    thread_unblock(wakeup_thread);
+  }
+
   thread_tick();
+}
+
+void waker(void *arg UNUSED)
+{
+  wakeup_thread = thread_current();
+
+  for (;;)
+  {
+    enum intr_level old_level = intr_disable();
+
+    thread_block();
+
+    intr_set_level(old_level);
+
+    timer_wakeup();
+  }
+}
+
+void timer_wakeup(void)
+{
+  struct list_elem *iter;
+  for (iter = list_begin(&sleeping_list); iter != list_end(&sleeping_list);
+       iter = list_next(iter))
+  {
+    struct thread *curr = list_entry(iter, struct thread, sleepelem);
+    if (curr->wakeup_time <= min_wakeup_time)
+    {
+      curr->wakeup_time = 0;
+      thread_wake(curr); /* Wake up the thread */
+      list_remove(iter); /* Remove the thread from sleeping list */
+    }
+    else
+    {
+      min_wakeup_time = curr->wakeup_time;
+      break;
+    }
+  }
+
+  if (list_empty(&sleeping_list))
+    min_wakeup_time = INT64_MAX;
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

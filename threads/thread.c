@@ -11,7 +11,6 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -81,20 +80,6 @@ void thread_schedule_tail(struct thread *prev);
 static tid_t
 allocate_tid(void);
 
-static bool
-sleep_compare(const struct list_elem *a, const struct list_elem *b,
-              void *AUX UNUSED);
-
-/* List of all sleeping threads */
-static struct list sleeping_list;
-
-int64_t min_wakeup_time;
-
-/* The wakeup thread */
-static struct thread *wakeup_thread;
-static void waker(void *arg UNUSED);
-void timer_wakeup(void);
-
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -115,7 +100,6 @@ void thread_init(void)
   lock_init(&tid_lock);
   list_init(&ready_list);
   list_init(&all_list);
-  list_init(&sleeping_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread();
@@ -132,7 +116,6 @@ void thread_start(void)
   struct semaphore idle_started;
   sema_init(&idle_started, 0);
   thread_create("idle", PRI_MIN, idle, &idle_started);
-  thread_create("wakeup_thread", PRI_MAX, waker, NULL);
 
   /* Start preemptive thread scheduling. */
   intr_enable();
@@ -146,12 +129,6 @@ void thread_start(void)
 void thread_tick(void)
 {
   struct thread *t = thread_current();
-
-  int64_t ticks = timer_ticks();
-  if (ticks >= min_wakeup_time && wakeup_thread->status == THREAD_BLOCKED)
-  {
-    thread_unblock(wakeup_thread);
-  }
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -632,71 +609,3 @@ allocate_tid(void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof(struct thread, stack);
 
-/* Comparator function for adding threads
-   to `sleeping_list`. Ensures addition in non-decreasing order */
-static bool
-sleep_compare(const struct list_elem *a, const struct list_elem *b,
-              void *AUX UNUSED)
-{
-  struct thread *t1 = list_entry(a, struct thread, sleepelem);
-  struct thread *t2 = list_entry(b, struct thread, sleepelem);
-
-  if (t1->wakeup_time < t2->wakeup_time)
-    return true;
-
-  return false;
-}
-
-void thread_sleep_for_ticks(int64_t wakeup_time)
-{
-  struct thread *curr = thread_current();
-
-  enum intr_level old_level = intr_disable();
-
-  curr->wakeup_time = wakeup_time;
-  if (wakeup_time < min_wakeup_time)
-    min_wakeup_time = wakeup_time;
-
-  list_insert_ordered(&sleeping_list, &curr->sleepelem, sleep_compare, NULL);
-  thread_sleep();
-
-  // setting the interrupt to old level
-  intr_set_level(old_level);
-}
-
-void waker(void *arg UNUSED)
-{
-  wakeup_thread = thread_current();
-
-  while (true)
-  {
-    enum intr_level old_level = intr_disable();
-    thread_block();
-    intr_set_level(old_level);
-    timer_wakeup();
-  }
-}
-
-void timer_wakeup(void)
-{
-  struct list_elem *iter;
-  for (iter = list_begin(&sleeping_list); iter != list_end(&sleeping_list);
-       iter = list_next(iter))
-  {
-    struct thread *curr = list_entry(iter, struct thread, sleepelem);
-    if (curr->wakeup_time <= min_wakeup_time)
-    {
-      curr->wakeup_time = 0;
-      thread_wake(curr); /* Wake up the thread */
-      list_remove(iter); /* Remove the thread from sleeping list */
-    }
-    else
-    {
-      min_wakeup_time = curr->wakeup_time;
-      break;
-    }
-  }
-
-  if (list_empty(&sleeping_list))
-    min_wakeup_time = INT64_MAX;
-}
