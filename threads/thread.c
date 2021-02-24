@@ -502,7 +502,6 @@ is_thread(struct thread *t)
 static void
 init_thread(struct thread *t, const char *name, int priority)
 {
-  struct thread *curr;
   ASSERT(t != NULL);
   ASSERT(PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT(name != NULL);
@@ -513,19 +512,21 @@ init_thread(struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *)t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  list_push_back(&all_list, &t->allelem);
 
   /* Custom defined values */
-  if (t == initial_thread)
+  if (t->tid == initial_thread->tid)
   {
     t->nice = NICE_INIT; /* The initial thread has a nice value of 0 */
     t->recent_cpu = 0;   /* The initial thread has a recent CPU value of 0 */
   }
   else
   {
-    t->nice = curr->nice;             /* Inherits nice from current thread */
-    t->recent_cpu = curr->recent_cpu; /* Inherits from current thread */
+    /* Inherit nice and recent_cpu from parent */
+    t->nice = thread_current()->nice;
+    t->recent_cpu = thread_current()->recent_cpu;
   }
+
+  list_push_back(&all_list, &t->allelem);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
