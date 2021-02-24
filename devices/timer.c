@@ -51,7 +51,7 @@ sleep_compare(const struct list_elem *a, const struct list_elem *b,
 int64_t min_wakeup_time;
 
 /* The wakeup thread - Remains blocked except when it is unblocked in the `timer_interrupt` function */
-static struct thread *wakeup_thread;
+// struct thread *wakeup_thread;
 
 /* The function that the wakeup_thread is assigned to. Goes into an infinite
 loop until the timer_interrupt unblocks it, to awake a sleeping thread */
