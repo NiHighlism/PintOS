@@ -8,11 +8,11 @@
 /* States in a thread's life cycle. */
 enum thread_status
 {
-   THREAD_RUNNING,  /* Running thread. */
-   THREAD_READY,    /* Not running but ready to run. */
-   THREAD_SLEEPING, /* Sleeping for specified time. */
-   THREAD_BLOCKED,  /* Waiting for an event to trigger. */
-   THREAD_DYING     /* About to be destroyed. */
+  THREAD_RUNNING,  /* Running thread. */
+  THREAD_READY,    /* Not running but ready to run. */
+  THREAD_SLEEPING, /* Sleeping for specified time. */
+  THREAD_BLOCKED,  /* Waiting for an event to trigger. */
+  THREAD_DYING     /* About to be destroyed. */
 };
 
 /* Thread identifier type.
@@ -24,6 +24,11 @@ typedef int tid_t;
 #define PRI_MIN 0      /* Lowest priority. */
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63     /* Highest priority. */
+
+/* Thread nice values. */
+#define NICE_INIT 0  /* nice is 0 for initial thread */
+#define NICE_MAX 20  /* Highest nice value is +20 (Min priority) */
+#define NICE_MIN -20 /* Lowest nice value is -20 (Max priority) */
 
 /* A kernel thread or user process.
 
@@ -83,28 +88,71 @@ typedef int tid_t;
    blocked state is on a semaphore wait list. */
 struct thread
 {
-   /* Owned by thread.c. */
-   tid_t tid;                 /* Thread identifier. */
-   enum thread_status status; /* Thread state. */
-   char name[16];             /* Name (for debugging purposes). */
-   uint8_t *stack;            /* Saved stack pointer. */
-   int priority;              /* Priority. */
-   struct list_elem allelem;  /* List element for all threads list. */
+  /* Owned by thread.c. */
+  tid_t tid;                 /* Thread identifier. */
+  enum thread_status status; /* Thread state. */
+  char name[16];             /* Name (for debugging purposes). */
+  uint8_t *stack;            /* Saved stack pointer. */
+  int priority;              /* Priority. */
+  struct list_elem allelem;  /* List element for all threads list. */
 
-   /* Shared between thread.c and synch.c. */
-   struct list_elem elem; /* List element. */
+  /* Shared between thread.c and synch.c. */
+  struct list_elem elem; /* List element. */
 
 #ifdef USERPROG
-   /* Owned by userprog/process.c. */
-   uint32_t *pagedir; /* Page directory. */
+  /* Owned by userprog/process.c. */
+  uint32_t *pagedir; /* Page directory. */
 #endif
 
-   /* Owned by thread.c. */
-   unsigned magic; /* Detects stack overflow. */
+  /* Owned by thread.c. */
+  unsigned magic; /* Detects stack overflow. */
 
-   int64_t wakeup_time;        /* Timer ticks till wakeup */
-   struct list_elem sleepelem; /* List element for sleeping threads list. */
+  /* Alarm Clock Data Structures */
+  int64_t wakeup_time;        /* Timer ticks till wakeup */
+  struct list_elem sleepelem; /* List element for sleeping threads list. */
+
+  /* MLFQ Scheduler Data Structures */
+  /*
+    Nice value for a thread. Ranges from NICE_MIN (-20) to NICE_MAX (+20)
+
+    A higher nice value means the thread gives up its CPU time to other
+    threads, a lower value means it takes away CPU time from others
+   */
+  int nice;
+
+  /*
+    Recent CPU - Store the amount of time a thread has used the CPU
+    Maintain a moving average instead of simple values in order to give
+    recent CPU usage a higher weight
+
+    At every timer interrupt, we increment the recent_cpu for the running
+    thread by 1
+
+    Additionally, we recalculate the value of recent_cpu once every second
+    for each thread with the below formula
+    (Recalculate when timer_ticks % TIMER_FREQ = 0 since tests assume this)
+
+    ```recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice```
+
+    (Load avg is a global, which is also updated to reflect real CPU usage)
+
+    We store 100 * recent_cpu to make it simpler to deal as an integer
+  */
+  int recent_cpu;
 };
+
+/*
+  Load avg is a global, which is also updated to reflect real CPU usage
+
+  We maintain a moving average and its value is updated once a second
+  with the following formula. The value is initialized to 0 at boot
+  (Recalculate when timer_ticks % TIMER_FREQ = 0 since tests assume this)
+
+  ```load_avg = (59/60)*load_avg + (1/60)*ready_threads```
+
+  We store 100 * recent_cpu to make it simpler to deal as an integer
+*/
+int load_avg;
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
