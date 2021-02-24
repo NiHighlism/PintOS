@@ -80,6 +80,11 @@ void thread_schedule_tail(struct thread *prev);
 static tid_t
 allocate_tid(void);
 
+/* Custom Prototypes and Variables */
+
+/* The mlfqs_scheduler that is assigned to the mlfqs_thread */
+void mlfqs_scheduler(void *arg UNUSED);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -101,6 +106,9 @@ void thread_init(void)
   list_init(&ready_list);
   list_init(&all_list);
 
+  /* Set the value of load_avg to be 0 at boot */
+  load_avg = 0;
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread();
   init_thread(initial_thread, "main", PRI_DEFAULT);
@@ -116,6 +124,13 @@ void thread_start(void)
   struct semaphore idle_started;
   sema_init(&idle_started, 0);
   thread_create("idle", PRI_MIN, idle, &idle_started);
+
+  /*
+    Create a new thread, whose only job is to wake up every 4 ticks,
+    recalculate MLFQ priorities and fix them. Assign this thread to the
+    `mlfqs_scheduler` function and give it max priority (PRI_MAX)
+   */
+  thread_create("mlfqs_thread", PRI_MAX, mlfqs_scheduler, NULL);
 
   /* Start preemptive thread scheduling. */
   intr_enable();
@@ -483,6 +498,7 @@ is_thread(struct thread *t)
 static void
 init_thread(struct thread *t, const char *name, int priority)
 {
+  struct thread *curr;
   ASSERT(t != NULL);
   ASSERT(PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT(name != NULL);
@@ -494,6 +510,18 @@ init_thread(struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back(&all_list, &t->allelem);
+
+  /* Custom defined values */
+  if (t == initial_thread)
+  {
+    t->nice = NICE_INIT; /* The initial thread has a nice value of 0 */
+    t->recent_cpu = 0;   /* The initial thread has a recent CPU value of 0 */
+  }
+  else
+  {
+    t->nice = curr->nice;             /* Inherits nice from current thread */
+    t->recent_cpu = curr->recent_cpu; /* Inherits from current thread */
+  }
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -608,4 +636,3 @@ allocate_tid(void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof(struct thread, stack);
-
