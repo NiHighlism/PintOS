@@ -73,6 +73,7 @@ void timer_init(void)
   /* Create a wakeup_thread, setting the priority to max (PRI_MAX)) and
   assign it to the waker function */
   thread_create("wakeup_thread", PRI_MAX, waker, NULL);
+  min_wakeup_time = INT64_MAX;
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
