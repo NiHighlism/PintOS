@@ -139,6 +139,9 @@ struct thread
     We store 100 * recent_cpu to make it simpler to deal as an integer
   */
   int recent_cpu;
+
+  /* List element for MLFQ Scheduler Lists */
+  struct list_elem mlfqselem;
 };
 
 /*

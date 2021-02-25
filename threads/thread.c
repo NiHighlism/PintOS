@@ -84,11 +84,17 @@ allocate_tid(void);
 
 /* Custom Prototypes and Variables */
 
+/* MLFQ Scheduler Queues */
+static struct list mlfqs_lists[PRI_MAX + 1];
+
 /* Create a new thread whose only job is to schedule */
 struct thread *mlfqs_thread;
 
 /* The mlfqs_scheduler that is assigned to the mlfqs_thread */
 void mlfqs_scheduler(void *arg UNUSED);
+
+/* Update the priorities of a single thread, using the MLFQS equations */
+void thread_update_priority(struct thread *t);
 
 /* Update the priorities of each thread, using the MLFQS equations */
 void thread_update_priorities(void);
@@ -123,6 +129,13 @@ void thread_init(void)
   lock_init(&tid_lock);
   list_init(&ready_list);
   list_init(&all_list);
+
+  if (thread_mlfqs)
+  {
+    int i;
+    for (i = PRI_MIN; i <= PRI_MAX; i++)
+      list_init(&mlfqs_lists[i]);
+  }
 
   /* Set the value of load_avg to be 0 at boot */
   load_avg = 0;
@@ -193,7 +206,6 @@ void thread_tick(void)
 
   if (thread_mlfqs && (is_mlfqs_priority_update || is_recent_cpu_update))
   {
-    // printf("Thread MLFQS is enabled!\n");
     thread_unblock(mlfqs_thread);
     intr_yield_on_return();
   }
@@ -301,6 +313,7 @@ void thread_unblock(struct thread *t)
   old_level = intr_disable();
   ASSERT(t->status == THREAD_BLOCKED);
   list_push_back(&ready_list, &t->elem);
+
   t->status = THREAD_READY;
   intr_set_level(old_level);
 }
@@ -678,7 +691,6 @@ uint32_t thread_stack_ofs = offsetof(struct thread, stack);
 
 void mlfqs_scheduler(void *arg UNUSED)
 {
-  return;
   mlfqs_thread = thread_current();
 
   for (;;)
@@ -746,18 +758,30 @@ void thread_update_recent_cpu(void)
   }
 }
 
+void thread_update_priority(struct thread *t)
+{
+  tid_t curr_tid = t->tid;
+  if (curr_tid != wakeup_thread->tid && curr_tid != mlfqs_thread->tid && curr_tid != idle_thread->tid)
+  {
+    int temp = INT_ADD(INT_DIVIDE(t->recent_cpu, 4), 2 * t->nice);
+    t->priority = ROUND_ZERO(INT_SUB(PRI_MAX, temp));
+  }
+
+  if (t->status == THREAD_READY)
+  {
+    // enum intr_level old_level = intr_disable();
+    list_remove(&t->mlfqselem);
+    list_push_back(&mlfqs_lists[t->priority], &t->mlfqselem);
+    // intr_set_level(old_level);
+  }
+}
+
 void thread_update_priorities()
 {
   struct list_elem *iter;
   for (iter = list_begin(&all_list); iter != list_end(&all_list); iter = list_next(iter))
   {
     struct thread *curr = list_entry(iter, struct thread, allelem);
-    tid_t curr_tid = curr->tid;
-
-    if (curr_tid != wakeup_thread->tid && curr_tid != mlfqs_thread->tid && curr_tid != idle_thread->tid)
-    {
-      int temp = INT_ADD(INT_DIVIDE(curr->recent_cpu, 4), 2 * curr->nice);
-      curr->priority = ROUND_ZERO(INT_SUB(PRI_MAX, temp));
-    }
+    thread_update_priority(curr);
   }
 }
