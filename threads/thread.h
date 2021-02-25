@@ -142,6 +142,18 @@ struct thread
 
   /* List element for MLFQ Scheduler Lists */
   struct list_elem mlfqselem;
+
+  /* The original priority of the thread. Need to handle donation */
+  int orig_priority;
+
+  /* The lock that given thread is waiting for, to donate/receive priority */
+  struct lock *wait_lock;
+
+  /* All possible donor threads */
+  struct list donors_list;
+
+  /* List element for donor lists */
+  struct list_elem donorelem;
 };
 
 /*

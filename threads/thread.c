@@ -115,6 +115,9 @@ void thread_update_load_avg(void);
 /* Get the highest priority level present in the MLFQ Scheduling lists */
 int thread_mlfqs_get_highest_priority(void);
 
+/* For priority scheduling - Compare priorities of 2 threads */
+static bool thread_compare_priorities(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -326,7 +329,7 @@ void thread_unblock(struct thread *t)
   ASSERT(t->status == THREAD_BLOCKED);
 
   if (!thread_mlfqs)
-    list_push_back(&ready_list, &t->elem);
+    list_insert_ordered(&ready_list, &t->elem, thread_compare_priorities, NULL);
   else
     list_push_back(&mlfqs_lists[t->priority], &t->mlfqselem);
 
@@ -434,7 +437,7 @@ void thread_yield(void)
   if (cur != idle_thread)
   {
     if (!thread_mlfqs)
-      list_push_back(&ready_list, &cur->elem);
+      list_insert_ordered(&ready_list, &cur->elem, thread_compare_priorities, NULL);
     else
       list_push_back(&mlfqs_lists[cur->priority], &cur->mlfqselem);
   }
@@ -461,13 +464,30 @@ void thread_foreach(thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
-  thread_current()->priority = new_priority;
+  enum intr_level old_level = intr_disable();
+
+  thread_current()->priority = CLAMP(new_priority, PRI_MIN, PRI_MAX);
+
+  if (new_priority > thread_current()->priority)
+  {
+    thread_current()->priority = new_priority;
+  }
+
+  if (!list_empty(&ready_list))
+  {
+    struct thread *front = list_entry(list_front(&ready_list), struct thread, elem);
+    if (front->priority > thread_current()->priority)
+      thread_yield();
+  }
+
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
 int thread_get_priority(void)
 {
-  return thread_current()->priority;
+  struct thread *curr = thread_current();
+  return curr->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -854,4 +874,15 @@ int thread_mlfqs_get_highest_priority(void)
   }
 
   return -1;
+}
+
+static bool thread_compare_priorities(struct list_elem *a, struct list_elem *b, void *aux UNUSED)
+{
+  struct thread *t1 = list_entry(a, struct thread, elem);
+  struct thread *t2 = list_entry(b, struct thread, elem);
+
+  if (t1->priority > t2->priority)
+    return true;
+
+  return false;
 }
