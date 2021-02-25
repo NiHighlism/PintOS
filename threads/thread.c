@@ -464,13 +464,15 @@ void thread_foreach(thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
+  struct thread *curr = thread_current();
+
   enum intr_level old_level = intr_disable();
 
-  thread_current()->priority = CLAMP(new_priority, PRI_MIN, PRI_MAX);
+  curr->orig_priority = CLAMP(new_priority, PRI_MIN, PRI_MAX);
 
-  if (new_priority > thread_current()->priority)
+  if (list_empty(&thread_current()->donors_list) || new_priority > thread_current()->priority)
   {
-    thread_current()->priority = new_priority;
+    curr->priority = new_priority;
   }
 
   if (!list_empty(&ready_list))
@@ -617,6 +619,10 @@ init_thread(struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *)t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  t->orig_priority = priority;
+  list_init(&t->donors_list);
+  t->wait_lock = NULL;
 
   /* Custom defined values */
   if (t->tid == initial_thread->tid)
