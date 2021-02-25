@@ -166,19 +166,18 @@ void thread_start(void)
   struct semaphore idle_started;
   sema_init(&idle_started, 0);
   thread_create("idle", PRI_MIN, idle, &idle_started);
-
-  /* Start preemptive thread scheduling. */
-  intr_enable();
-
-  /* Wait for the idle thread to initialize idle_thread. */
-  sema_down(&idle_started);
-
   /*
     Create a new thread, whose only job is to wake up every 4 ticks,
     recalculate MLFQ priorities and fix them. Assign this thread to the
     `mlfqs_scheduler` function and give it max priority (PRI_MAX)
    */
   thread_create("mlfqs_thread", PRI_MAX, mlfqs_scheduler, NULL);
+
+  /* Start preemptive thread scheduling. */
+  intr_enable();
+
+  /* Wait for the idle thread to initialize idle_thread. */
+  sema_down(&idle_started);
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -212,6 +211,7 @@ void thread_tick(void)
 
   if (thread_mlfqs && (is_mlfqs_priority_update || is_recent_cpu_update))
   {
+    // printf("Update CPU: %d | Priority Update: %d | ticks: %ld\n", is_recent_cpu_update, is_mlfqs_priority_update, ticks);
     thread_unblock(mlfqs_thread);
     intr_yield_on_return();
   }
@@ -320,6 +320,9 @@ void thread_unblock(struct thread *t)
   ASSERT(is_thread(t));
 
   old_level = intr_disable();
+
+  // printf("Name of the thread to be unblocked: %s | status: %d | priority: %d\n", t->name, t->status, t->priority);
+
   ASSERT(t->status == THREAD_BLOCKED);
 
   if (!thread_mlfqs)
@@ -745,23 +748,17 @@ void mlfqs_scheduler(void *arg UNUSED)
   for (;;)
   {
     enum intr_level old_level = intr_disable();
-
     thread_block();
-
     intr_set_level(old_level);
 
     if (is_recent_cpu_update)
     {
       thread_update_load_avg();
       thread_update_recent_cpu();
-      is_recent_cpu_update = false;
     }
 
     if (is_mlfqs_priority_update)
-    {
       thread_update_priorities();
-      is_mlfqs_priority_update = false;
-    }
   }
 }
 
@@ -770,12 +767,12 @@ void thread_update_load_avg(void)
   int ready_threads = 0;
 
   struct list_elem *iter;
-  for (iter = list_begin(&ready_list); iter != list_end(&ready_list); iter = list_next(iter))
+  for (iter = list_begin(&all_list); iter != list_end(&all_list); iter = list_next(iter))
   {
-    struct thread *curr = list_entry(iter, struct thread, elem);
+    struct thread *curr = list_entry(iter, struct thread, allelem);
     tid_t curr_tid = curr->tid;
 
-    if (curr_tid != wakeup_thread->tid && curr_tid != mlfqs_thread->tid && curr_tid != idle_thread->tid)
+    if (curr->status == THREAD_READY && curr_tid != wakeup_thread->tid && curr_tid != mlfqs_thread->tid && curr_tid != idle_thread->tid)
       ready_threads++;
   }
 
@@ -787,10 +784,14 @@ void thread_update_load_avg(void)
 
   int64_t n = INT_ADD(INT_MULTIPLY(load_avg, 59), ready_threads);
   load_avg = INT_DIVIDE(n, 60);
+
+  // printf("Load average is %d and number of threads is %d\n", load_avg, ready_threads);
 }
 
 void thread_update_recent_cpu(void)
 {
+  is_recent_cpu_update = false;
+
   struct list_elem *iter;
   for (iter = list_begin(&all_list); iter != list_end(&all_list); iter = list_next(iter))
   {
@@ -828,6 +829,8 @@ void thread_update_priority(struct thread *t)
 
 void thread_update_priorities()
 {
+  is_mlfqs_priority_update = false;
+
   struct list_elem *iter;
   for (iter = list_begin(&all_list); iter != list_end(&all_list); iter = list_next(iter))
   {
