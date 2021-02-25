@@ -149,6 +149,9 @@ struct thread
   /* The lock that given thread is waiting for, to donate/receive priority */
   struct lock *wait_lock;
 
+  /* The thread that holds the lock `wait_lock` */
+  struct thread *thread_lock;
+
   /* All possible donor threads */
   struct list donors_list;
 

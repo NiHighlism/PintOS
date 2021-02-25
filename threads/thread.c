@@ -287,8 +287,12 @@ tid_t thread_create(const char *name, int priority, thread_func *function, void 
   /* Add to run queue. */
   thread_unblock(t);
 
-  if (t->priority > thread_current()->priority)
+  old_level = intr_disable();
+
+  if (t->priority > thread_current()->priority && (t != idle_thread))
     thread_yield();
+
+  intr_set_level(old_level);
 
   return tid;
 }
@@ -470,7 +474,7 @@ void thread_set_priority(int new_priority)
 
   curr->orig_priority = CLAMP(new_priority, PRI_MIN, PRI_MAX);
 
-  if (list_empty(&thread_current()->donors_list) || new_priority > thread_current()->priority)
+  if (list_empty(&curr->donors_list) || new_priority > curr->priority)
   {
     curr->priority = new_priority;
   }
@@ -623,6 +627,7 @@ init_thread(struct thread *t, const char *name, int priority)
   t->orig_priority = priority;
   list_init(&t->donors_list);
   t->wait_lock = NULL;
+  t->thread_lock = NULL;
 
   /* Custom defined values */
   if (t->tid == initial_thread->tid)
