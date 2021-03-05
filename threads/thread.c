@@ -197,7 +197,8 @@ void thread_tick(void) {
     intr_yield_on_return();
   }
 
-  if (thread_mlfqs && (is_mlfqs_priority_update || is_recent_cpu_update)) {
+  if (thread_mlfqs && (is_mlfqs_priority_update || is_recent_cpu_update) &&
+      mlfqs_thread->status == THREAD_BLOCKED) {
     // printf("Update CPU: %d | Priority Update: %d | ticks: %ld\n", is_recent_cpu_update, is_mlfqs_priority_update, ticks);
     thread_unblock(mlfqs_thread);
     intr_yield_on_return();
