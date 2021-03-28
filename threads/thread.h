@@ -155,6 +155,8 @@ struct thread {
 
   /* List element for donor lists */
   struct list_elem donorelem;
+
+  struct thread* parent;
 };
 
 /*

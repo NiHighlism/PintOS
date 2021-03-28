@@ -569,6 +569,8 @@ static void init_thread(struct thread* t, const char* name, int priority) {
   t->wait_lock = NULL;
   t->thread_lock = NULL;
 
+  t->parent = running_thread();
+
   /* Custom defined values */
   if (t->tid == initial_thread->tid) {
     t->nice = NICE_INIT; /* The initial thread has a nice value of 0 */
