@@ -128,6 +128,9 @@ void thread_init(void) {
   list_init(&ready_list);
   list_init(&all_list);
 
+  /* Initialize the global filesystem lock. We use it when doing filesys operations */
+  lock_init(&global_filesystem_lock);
+
   if (thread_mlfqs) {
     int i;
     for (i = PRI_MIN; i <= PRI_MAX; i++)
@@ -244,6 +247,14 @@ tid_t thread_create(const char* name, int priority, thread_func* function, void*
   /* Initialize thread. */
   init_thread(t, name, priority);
   tid = t->tid = allocate_tid();
+
+  /* Userprog Part 1 */
+  struct child_process* c = malloc(sizeof(*c));
+  c->tid = tid;
+  c->exit_status = t->exit_status;
+  c->old = false;
+  list_push_back(&running_thread()->process_children, &c->elem);
+  /* Userprog Part 1 */
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack'
@@ -386,6 +397,14 @@ void thread_exit(void) {
 #ifdef USERPROG
   process_exit();
 #endif
+
+  /* Userprog Part 1 */
+  while (!list_empty(&thread_current()->process_children)) {
+    struct file_proc* f =
+        list_entry(list_pop_front(&thread_current()->process_children), struct child_process, elem);
+    free(f);
+  }
+  /* Userprog Part 1 */
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -569,7 +588,15 @@ static void init_thread(struct thread* t, const char* name, int priority) {
   t->wait_lock = NULL;
   t->thread_lock = NULL;
 
+  /* Initialize members needed for userprogs */
   t->parent = running_thread();
+  list_init(&t->process_children);
+  sema_init(&t->child_process_lock, 0);
+  t->tid_wait = 0;
+  t->executable_file = NULL;
+  t->num_fd = 2;
+  list_init(&t->files);
+  t->exit_status = EXIT_STATUS_FAIL;
 
   /* Custom defined values */
   if (t->tid == initial_thread->tid) {

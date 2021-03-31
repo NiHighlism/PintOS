@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <threads/synch.h>
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -28,6 +29,9 @@ typedef int tid_t;
 #define NICE_INIT 0  /* nice is 0 for initial thread */
 #define NICE_MAX 20  /* Highest nice value is +20 (Min priority) */
 #define NICE_MIN -20 /* Lowest nice value is -20 (Max priority) */
+
+/* Userprogs part 1 */
+#define EXIT_STATUS_FAIL -1
 
 /* A kernel thread or user process.
 
@@ -156,7 +160,35 @@ struct thread {
   /* List element for donor lists */
   struct list_elem donorelem;
 
-  struct thread* parent;
+  /* User Program Members */
+  bool complete;
+
+  int exit_status;
+
+  /* The tid we're waiting for */
+  tid_t tid_wait;
+  struct list process_children;        /* A list of child processes */
+  struct thread* parent;               /* Parent thread for a given thread */
+  struct semaphore child_process_lock; /* Semaphore for child process */
+
+  struct list files;            /* The list of files opened by the process */
+  int num_fd;                   /* The number of files open, initialized to 2 */
+  struct file* executable_file; /* Pointer to the running executable file */
+};
+
+/* Element for list of files. Consists of integer file descriptor and file pointer */
+struct process_file {
+  int fd;
+  struct file* fileptr;
+  struct list_elem elem;
+};
+
+/* Structure for child process */
+struct child_process {
+  int tid;
+  int exit_status;
+  struct list_elem elem;
+  bool old;
 };
 
 /*
@@ -225,5 +257,8 @@ int thread_get_nice(void);
 void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
+
+/* Create a global filesystem lock. We use it when doing filesys operations */
+struct lock global_filesystem_lock;
 
 #endif /* threads/thread.h */
