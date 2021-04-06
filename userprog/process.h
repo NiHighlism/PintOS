@@ -8,7 +8,4 @@ int process_wait(tid_t);
 void process_exit(void);
 void process_activate(void);
 
-void process_exit_helper(int status);
-int process_execute_helper(char* file_name);
-
 #endif /* userprog/process.h */

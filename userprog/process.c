@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "userprog/gdt.h"
+#include "userprog/handlers.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
@@ -136,7 +137,7 @@ void process_exit(void) {
   uint32_t* pd;
 
   if (curr->exit_status == EXIT_STATUS_FAIL)
-    process_exit_helper(EXIT_STATUS_FAIL);
+    SYSCALL_exit_handler(EXIT_STATUS_FAIL);
 
   int exit_code = curr->exit_status;
   printf("%s: exit(%d)\n", curr->name, exit_code);
@@ -546,45 +547,4 @@ static bool install_page(void* upage, void* kpage, bool writable) {
      address, then map our page there. */
   return (pagedir_get_page(t->pagedir, upage) == NULL &&
           pagedir_set_page(t->pagedir, upage, kpage, writable));
-}
-
-void process_exit_helper(int status) {
-  struct list_elem* e;
-
-  for (e = list_begin(&thread_current()->parent->process_children);
-       e != list_end(&thread_current()->parent->process_children); e = list_next(e)) {
-    struct child_process* f = list_entry(e, struct child_process, elem);
-    if (f->tid == thread_current()->tid) {
-      f->old = true;
-      f->exit_status = status;
-    }
-  }
-
-  thread_current()->exit_status = status;
-
-  if (thread_current()->parent->tid_wait == thread_current()->tid)
-    sema_up(&thread_current()->parent->child_process_lock);
-
-  thread_exit();
-}
-
-int process_execute_helper(char* file_name) {
-  lock_acquire(&global_filesystem_lock);
-
-  char* filename_temp = malloc(strlen(file_name) + 1);
-  strlcpy(filename_temp, file_name, strlen(file_name) + 1);
-
-  char* save_ptr;
-  filename_temp = strtok_r(filename_temp, " ", &save_ptr);
-
-  struct file* f = filesys_open(filename_temp);
-
-  if (f == NULL) {
-    lock_release(&global_filesystem_lock);
-    return -1;
-  } else {
-    file_close(f);
-    lock_release(&global_filesystem_lock);
-    return process_execute(file_name);
-  }
 }
