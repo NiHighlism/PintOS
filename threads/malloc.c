@@ -200,7 +200,7 @@ void free(void* p) {
     struct desc* d = a->desc;
 
     if (d != NULL) {
-      /* It's a normal block.  We handle it here. */
+/* It's a normal block.  We handle it here. */
 
 #ifndef NDEBUG
       /* Clear the block to help detect use-after-free bugs. */

@@ -52,5 +52,22 @@ static void syscall_handler(struct intr_frame* f UNUSED) {
 
       f->eax = SYSCALL_write_handler(*(p + 5), *(p + 6), *(p + 7));
       break;
+
+    case SYS_CREATE:
+      is_valid_address(p + 4);
+      is_valid_address(p + 5);
+
+      is_valid_address(*(p + 4));
+
+      f->eax = SYSCALL_create_handler(*(p + 4), *(p + 5));
+      break;
+
+    case SYS_REMOVE:
+      is_valid_address(p + 1);
+
+      is_valid_address(*(p + 1));
+
+      f->eax = SYSCALL_remove_handler(*(p + 1));
+      break;
   }
 }

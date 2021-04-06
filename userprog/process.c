@@ -149,9 +149,7 @@ void process_exit(void) {
   struct list_elem* e;
   while (!list_empty(files)) {
     e = list_pop_front(files);
-
     struct process_file* f = list_entry(e, struct process_file, elem);
-
     file_close(f->fileptr);
     list_remove(e);
     free(f);

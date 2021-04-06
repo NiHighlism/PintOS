@@ -12,12 +12,11 @@ int main(int argc, char* argv[]) {
   double timeout;
 
   if (argc < 3) {
-    fprintf(stderr,
-            "setitimer-helper: runs a program with a virtual CPU limit\n"
-            "usage: %s TIMEOUT PROGRAM [ARG...]\n"
-            "  where TIMEOUT is the virtual CPU limit, in seconds,\n"
-            "    and remaining arguments specify the program to run\n"
-            "    and its argument.\n",
+    fprintf(stderr, "setitimer-helper: runs a program with a virtual CPU limit\n"
+                    "usage: %s TIMEOUT PROGRAM [ARG...]\n"
+                    "  where TIMEOUT is the virtual CPU limit, in seconds,\n"
+                    "    and remaining arguments specify the program to run\n"
+                    "    and its argument.\n",
             program_name);
     return EXIT_FAILURE;
   }

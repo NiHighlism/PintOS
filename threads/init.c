@@ -96,7 +96,7 @@ int main(void) {
   malloc_init();
   paging_init();
 
-  /* Segmentation. */
+/* Segmentation. */
 #ifdef USERPROG
   tss_init();
   gdt_init();
@@ -357,7 +357,7 @@ static void usage(void) {
 #ifdef USERPROG
          "  -ul=COUNT          Limit user memory to COUNT pages.\n"
 #endif
-  );
+         );
   shutdown_power_off();
 }
 

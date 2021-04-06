@@ -2,6 +2,7 @@
 #include <debug.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include "filesys/filesys.h"
 #include "lib/kernel/list.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
@@ -56,11 +57,38 @@ int SYSCALL_write_handler(int fd, const void* buffer, unsigned size) {
   return -1;
 }
 
+int SYSCALL_create_handler(const char* name, off_t initial_size) {
+  lock_acquire(&global_filesystem_lock);
+
+  printf("Filename is %s\n", name);
+
+  bool status = filesys_create(name, initial_size);
+
+  lock_release(&global_filesystem_lock);
+  return (int)status;
+}
+
+int SYSCALL_remove_handler(const char* name) {
+  lock_acquire(&global_filesystem_lock);
+
+  bool status = filesys_remove(name);
+
+  lock_release(&global_filesystem_lock);
+  return (int)status;
+}
+
 bool is_valid_address(const void* vaddr) {
-  if (!is_user_vaddr(vaddr) || !pagedir_get_page(thread_current()->pagedir, vaddr)) {
-    SYSCALL_exit_handler(EXIT_STATUS_FAIL);
+  if (!is_user_vaddr(vaddr) || is_kernel_vaddr(vaddr)) {
+    thread_current()->exit_status = -1;
+    thread_exit();
     return false;
   }
 
+  void* ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
+  if (!ptr) {
+    thread_current()->exit_status = -1;
+    thread_exit();
+    return false;
+  }
   return true;
 }
