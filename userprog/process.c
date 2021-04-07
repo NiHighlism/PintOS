@@ -5,6 +5,7 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -262,7 +263,7 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool load(const char* file_name, void (**eip)(void), void** esp) {
-  // printf("In load\n");
+  //printf("In load\n");
   struct thread* t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file* file = NULL;
@@ -279,15 +280,16 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
   /* Open executable file. */
 
-  char* filename_temp = malloc(strlen(file_name) + 1);
-  strlcpy(filename_temp, file_name, strlen(file_name) + 1);
+  char* fn_cp = malloc(strlen(file_name) + 1);
+  strlcpy(fn_cp, file_name, strlen(file_name) + 1);
 
   char* save_ptr;
-  filename_temp = strtok_r(filename_temp, " ", &save_ptr);
+  fn_cp = strtok_r(fn_cp, " ", &save_ptr);
 
-  file = filesys_open(filename_temp);
+  file = filesys_open(fn_cp);
 
-  free(filename_temp);
+  free(fn_cp);
+  //TODO : Free fn_cp
 
   if (file == NULL) {
     printf("load: %s: open failed\n", file_name);
@@ -335,12 +337,12 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
           uint32_t read_bytes, zero_bytes;
           if (phdr.p_filesz > 0) {
             /* Normal segment.
-             Read initial part from disk and zero the rest. */
+                     Read initial part from disk and zero the rest. */
             read_bytes = page_offset + phdr.p_filesz;
             zero_bytes = (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
           } else {
             /* Entirely zero.
-             Don't read anything from disk. */
+                     Don't read anything from disk. */
             read_bytes = 0;
             zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
           }
@@ -489,10 +491,10 @@ static bool setup_stack(void** esp, char* file_name) {
   char *token, *save_ptr;
   int argc = 0, i;
 
-  char* filename_temp = malloc(strlen(file_name) + 1);
-  strlcpy(filename_temp, file_name, strlen(file_name) + 1);
+  char* copy = malloc(strlen(file_name) + 1);
+  strlcpy(copy, file_name, strlen(file_name) + 1);
 
-  for (token = strtok_r(filename_temp, " ", &save_ptr); token != NULL;
+  for (token = strtok_r(copy, " ", &save_ptr); token != NULL;
        token = strtok_r(NULL, " ", &save_ptr))
     argc++;
 
@@ -532,7 +534,7 @@ static bool setup_stack(void** esp, char* file_name) {
   *esp -= sizeof(int);
   memcpy(*esp, &zero, sizeof(int));
 
-  free(filename_temp);
+  free(copy);
   free(argv);
 
   return success;

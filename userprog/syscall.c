@@ -62,11 +62,42 @@ static void syscall_handler(struct intr_frame* f) {
       f->eax = SYSCALL_open_handler(*(p + 1));
       break;
 
+    case SYS_FILESIZE:
+      is_valid_address(p + 1);
+
+      f->eax = SYSCALL_filesize_handler(*(p + 1));
+      break;
+
+    case SYS_READ:
+      is_valid_address(p + 7);
+      is_valid_address(*(p + 6));
+
+      f->eax = SYSCALL_read_handler(*(p + 5), *(p + 6), *(p + 7));
+      break;
+
     case SYS_WRITE:
       is_valid_address(p + 7);
       is_valid_address(*(p + 6));
 
       f->eax = SYSCALL_write_handler(*(p + 5), *(p + 6), *(p + 7));
+      break;
+
+    case SYS_SEEK:
+      is_valid_address(p + 5);
+
+      SYSCALL_seek_handler(*(p + 4), *(p + 5));
+      break;
+
+    case SYS_TELL:
+      is_valid_address(p + 1);
+
+      SYSCALL_tell_handler(*(p + 1));
+      break;
+
+    case SYS_CLOSE:
+      is_valid_address(p + 1);
+
+      SYSCALL_close_handler(*(p + 1));
       break;
   }
 }
