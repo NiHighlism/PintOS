@@ -7,15 +7,18 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "userprog/process.h"
 
 void SYSCALL_exit_handler(int status) {
+  // printf("Exit : %s %d %d\n",thread_current()->name, thread_current()->tid,
+  // status);
   struct list_elem* e;
 
   for (e = list_begin(&thread_current()->parent->process_children);
        e != list_end(&thread_current()->parent->process_children); e = list_next(e)) {
     struct child_process* f = list_entry(e, struct child_process, elem);
     if (f->tid == thread_current()->tid) {
-      f->old = true;
+      f->did_execute = true;
       f->exit_status = status;
     }
   }
@@ -49,18 +52,10 @@ int SYSCALL_execute_handler(char* file_name) {
   }
 }
 
-int SYSCALL_write_handler(int fd, const void* buffer, unsigned size) {
-  if (fd == STDOUT_FD) {
-    putbuf(buffer, size);
-    return size;
-  }
-  return -1;
-}
+int SYSCALL_wait_handler(tid_t child_tid) { return process_wait(child_tid); }
 
 int SYSCALL_create_handler(const char* name, off_t initial_size) {
   lock_acquire(&global_filesystem_lock);
-
-  printf("Filename is %s\n", name);
 
   bool status = filesys_create(name, initial_size);
 
@@ -77,17 +72,40 @@ int SYSCALL_remove_handler(const char* name) {
   return (int)status;
 }
 
+int SYSCALL_open_handler(const char* name) {
+  lock_acquire(&global_filesystem_lock);
+  struct file* fileptr = filesys_open(name);
+  lock_release(&global_filesystem_lock);
+
+  if (!fileptr) {
+    return -1;
+  }
+
+  struct process_file* newfile = malloc(sizeof(newfile));
+  newfile->fileptr = fileptr;
+  newfile->fd = thread_current()->num_fd;
+  thread_current()->num_fd++;
+  list_push_back(&thread_current()->files, &newfile->elem);
+  return newfile->fd;
+}
+
+int SYSCALL_write_handler(int fd, const void* buffer, unsigned size) {
+  if (fd == STDOUT_FD) {
+    putbuf(buffer, size);
+    return size;
+  }
+  return -1;
+}
+
 bool is_valid_address(const void* vaddr) {
-  if (!is_user_vaddr(vaddr) || is_kernel_vaddr(vaddr)) {
-    thread_current()->exit_status = -1;
-    thread_exit();
+  if (!is_user_vaddr(vaddr)) {
+    SYSCALL_exit_handler(-1);
     return false;
   }
 
   void* ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
   if (!ptr) {
-    thread_current()->exit_status = -1;
-    thread_exit();
+    SYSCALL_exit_handler(-1);
     return false;
   }
   return true;

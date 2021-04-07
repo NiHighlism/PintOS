@@ -252,7 +252,7 @@ tid_t thread_create(const char* name, int priority, thread_func* function, void*
   struct child_process* c = malloc(sizeof(*c));
   c->tid = tid;
   c->exit_status = t->exit_status;
-  c->old = false;
+  c->did_execute = false;
   list_push_back(&running_thread()->process_children, &c->elem);
   /* Userprog Part 1 */
 
@@ -330,39 +330,6 @@ void thread_unblock(struct thread* t) {
     list_push_back(&mlfqs_lists[t->priority], &t->mlfqselem);
 
   t->status = THREAD_READY;
-  intr_set_level(old_level);
-}
-
-/* Puts the current thread to sleep.  It will not be scheduled
-   again until awoken by `thread_wake()`
-
-   This function must be called with interrupts turned off.  It
-   is usually a better idea to use one of the synchronization
-   primitives in synch.h. */
-void thread_sleep(void) {
-  ASSERT(!intr_context());
-  ASSERT(intr_get_level() == INTR_OFF);
-
-  thread_current()->status = THREAD_SLEEPING;
-  schedule();
-}
-
-/* Transitions a sleeping thread T to the ready-to-run state.
-   This is an error if T is not sleeping */
-void thread_wake(struct thread* t) {
-  ASSERT(is_thread(t));
-
-  enum intr_level old_level = intr_disable();
-
-  ASSERT(t->status == THREAD_SLEEPING);
-
-  if (!thread_mlfqs)
-    list_push_back(&ready_list, &t->elem);
-  else
-    list_push_back(&mlfqs_lists[t->priority], &t->mlfqselem);
-
-  t->status = THREAD_READY;
-
   intr_set_level(old_level);
 }
 

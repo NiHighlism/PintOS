@@ -132,7 +132,7 @@ void timer_sleep(int64_t ticks) {
   min_wakeup_time = (wakeup_time < min_wakeup_time) ? wakeup_time : min_wakeup_time;
 
   list_insert_ordered(&sleeping_list, &curr->sleepelem, sleep_compare, NULL);
-  thread_sleep();
+  thread_block();
 
   // setting the interrupt to old level
   intr_set_level(old_level);
@@ -212,8 +212,8 @@ void timer_wakeup(void) {
     struct thread* curr = list_entry(iter, struct thread, sleepelem);
     if (curr->wakeup_time <= min_wakeup_time) {
       curr->wakeup_time = 0;
-      thread_wake(curr); /* Wake up the thread */
-      list_remove(iter); /* Remove the thread from sleeping list */
+      thread_unblock(curr); /* Wake up the thread */
+      list_remove(iter);    /* Remove the thread from sleeping list */
     } else {
       min_wakeup_time = curr->wakeup_time;
       break;

@@ -1,27 +1,28 @@
 #include "userprog/process.h"
+#include "filesys/directory.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "threads/flags.h"
+#include "threads/init.h"
+#include "threads/interrupt.h"
+#include "threads/palloc.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "userprog/gdt.h"
+#include "userprog/handlers.h"
+#include "userprog/pagedir.h"
+#include "userprog/tss.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "userprog/gdt.h"
-#include "userprog/handlers.h"
-#include "userprog/pagedir.h"
-#include "userprog/tss.h"
-#include "filesys/directory.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
-#include "threads/flags.h"
-#include "threads/thread.h"
-#include "threads/init.h"
-#include "threads/interrupt.h"
-#include "threads/palloc.h"
-#include "threads/thread.h"
-#include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char* cmdline, void (**eip)(void), void** esp);
+
+extern struct list all_list;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -38,12 +39,12 @@ tid_t process_execute(const char* file_name) {
   if (filename_temp == NULL)
     return TID_ERROR;
   strlcpy(filename_temp, file_name, PGSIZE);
-
   char* save_ptr;
   f_name = malloc(strlen(file_name) + 1);
   strlcpy(f_name, file_name, strlen(file_name) + 1);
   f_name = strtok_r(f_name, " ", &save_ptr);
-
+  /* Create a new thread to execute FILE_NAME. */
+  // printf("%d\n", thread_current()->tid);
   tid = thread_create(f_name, PRI_DEFAULT, start_process, filename_temp);
   free(f_name);
   if (tid == TID_ERROR)
@@ -60,21 +61,22 @@ tid_t process_execute(const char* file_name) {
 /* A thread function that loads a user process and starts it
    running. */
 static void start_process(void* file_name_) {
-  //printf("In start_process\n");
+  // printf("In start_process\n");
   char* file_name = file_name_;
   struct intr_frame if_;
-  bool complete;
+  bool success;
 
   /* Initialize interrupt frame and load executable. */
   memset(&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  complete = load(file_name, &if_.eip, &if_.esp);
+  success = load(file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page(file_name);
-  if (!complete) {
+  if (!success) {
+    // printf("%d %d\n",thread_current()->tid, thread_current()->parent->tid);
     thread_current()->parent->complete = false;
     sema_up(&thread_current()->parent->child_process_lock);
     thread_exit();
@@ -99,10 +101,10 @@ static void start_process(void* file_name_) {
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
    immediately, without waiting.
+
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int process_wait(tid_t child_tid) {
-  //printf("Wait : %s %d\n",thread_current()->name, child_tid);
   struct list_elem* e;
 
   struct child_process* ch = NULL;
@@ -122,7 +124,7 @@ int process_wait(tid_t child_tid) {
 
   thread_current()->tid_wait = ch->tid;
 
-  if (!ch->old)
+  if (!ch->did_execute)
     sema_down(&thread_current()->child_process_lock);
 
   int temp = ch->exit_status;
@@ -131,13 +133,13 @@ int process_wait(tid_t child_tid) {
   return temp;
 }
 
-/* Free the current process's resources. */
+// /* Free the current process's resources. */
 void process_exit(void) {
   struct thread* curr = thread_current();
   uint32_t* pd;
 
   if (curr->exit_status == EXIT_STATUS_FAIL)
-    SYSCALL_exit_handler(EXIT_STATUS_FAIL);
+    SYSCALL_exit_handler(-1);
 
   int exit_code = curr->exit_status;
   printf("%s: exit(%d)\n", curr->name, exit_code);
@@ -145,11 +147,13 @@ void process_exit(void) {
   lock_acquire(&global_filesystem_lock);
   file_close(curr->executable_file);
 
-  struct list* files = &curr->files;
+  struct list* filelist = &thread_current()->files;
   struct list_elem* e;
-  while (!list_empty(files)) {
-    e = list_pop_front(files);
+
+  while (!list_empty(filelist)) {
+    e = list_pop_front(filelist);
     struct process_file* f = list_entry(e, struct process_file, elem);
+
     file_close(f->fileptr);
     list_remove(e);
     free(f);
@@ -258,11 +262,12 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool load(const char* file_name, void (**eip)(void), void** esp) {
+  // printf("In load\n");
   struct thread* t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file* file = NULL;
   off_t file_ofs;
-  bool complete = false;
+  bool success = false;
   int i;
 
   lock_acquire(&global_filesystem_lock);
@@ -330,12 +335,12 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
           uint32_t read_bytes, zero_bytes;
           if (phdr.p_filesz > 0) {
             /* Normal segment.
-                     Read initial part from disk and zero the rest. */
+             Read initial part from disk and zero the rest. */
             read_bytes = page_offset + phdr.p_filesz;
             zero_bytes = (ROUND_UP(page_offset + phdr.p_memsz, PGSIZE) - read_bytes);
           } else {
             /* Entirely zero.
-                     Don't read anything from disk. */
+             Don't read anything from disk. */
             read_bytes = 0;
             zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
           }
@@ -353,7 +358,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 
   /* Start address. */
   *eip = (void (*)(void))ehdr.e_entry;
-  complete = true;
+  success = true;
 
   file_deny_write(file);
 
@@ -362,7 +367,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
 done:
   /* We arrive here whether the load is successful or not. */
   lock_release(&global_filesystem_lock);
-  return complete;
+  return success;
 }
 
 /* load() helpers. */
@@ -415,11 +420,15 @@ static bool validate_segment(const struct Elf32_Phdr* phdr, struct file* file) {
 /* Loads a segment starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
+
         - READ_BYTES bytes at UPAGE must be read from FILE
           starting at offset OFS.
+
         - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+
    The pages initialized by this function must be writable by the
    user process if WRITABLE is true, read-only otherwise.
+
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t read_bytes,
@@ -431,8 +440,8 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
   file_seek(file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
+       We will read PAGE_READ_BYTES bytes from FILE
+       and zero the final PAGE_ZERO_BYTES bytes. */
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
@@ -466,12 +475,12 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
    user virtual memory. */
 static bool setup_stack(void** esp, char* file_name) {
   uint8_t* kpage;
-  bool complete = false;
+  bool success = false;
 
   kpage = palloc_get_page(PAL_USER | PAL_ZERO);
   if (kpage != NULL) {
-    complete = install_page(((uint8_t*)PHYS_BASE) - PGSIZE, kpage, true);
-    if (complete)
+    success = install_page(((uint8_t*)PHYS_BASE) - PGSIZE, kpage, true);
+    if (success)
       *esp = PHYS_BASE;
     else
       palloc_free_page(kpage);
@@ -526,7 +535,7 @@ static bool setup_stack(void** esp, char* file_name) {
   free(filename_temp);
   free(argv);
 
-  return complete;
+  return success;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

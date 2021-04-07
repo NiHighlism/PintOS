@@ -30,8 +30,7 @@ typedef int tid_t;
 #define NICE_MAX 20  /* Highest nice value is +20 (Min priority) */
 #define NICE_MIN -20 /* Lowest nice value is -20 (Max priority) */
 
-/* Userprogs part 1 */
-#define EXIT_STATUS_FAIL -1
+#define EXIT_STATUS_FAIL -100
 
 /* A kernel thread or user process.
 
@@ -41,42 +40,42 @@ typedef int tid_t;
    thread's kernel stack, which grows downward from the top of
    the page (at offset 4 kB).  Here's an illustration:
 
-	4 kB +---------------------------------+
-	     |          kernel stack           |
-	     |                |                |
-	     |                |                |
-	     |                V                |
-	     |         grows downward          |
-	     |                                 |
-	     |                                 |
-	     |                                 |
-	     |                                 |
-	     |                                 |
-	     |                                 |
-	     |                                 |
-	     |                                 |
-	     +---------------------------------+
-	     |              magic              |
-	     |                :                |
-	     |                :                |
-	     |               name              |
-	     |              status             |
-	0 kB +---------------------------------+
+        4 kB +---------------------------------+
+             |          kernel stack           |
+             |                |                |
+             |                |                |
+             |                V                |
+             |         grows downward          |
+             |                                 |
+             |                                 |
+             |                                 |
+             |                                 |
+             |                                 |
+             |                                 |
+             |                                 |
+             |                                 |
+             +---------------------------------+
+             |              magic              |
+             |                :                |
+             |                :                |
+             |               name              |
+             |              status             |
+        0 kB +---------------------------------+
 
    The upshot of this is twofold:
 
       1. First, `struct thread' must not be allowed to grow too
-	 big.  If it does, then there will not be enough room for
-	 the kernel stack.  Our base `struct thread' is only a
-	 few bytes in size.  It probably should stay well under 1
-	 kB.
+         big.  If it does, then there will not be enough room for
+         the kernel stack.  Our base `struct thread' is only a
+         few bytes in size.  It probably should stay well under 1
+         kB.
 
       2. Second, kernel stacks must not be allowed to grow too
-	 large.  If a stack overflows, it will corrupt the thread
-	 state.  Thus, kernel functions should not allocate large
-	 structures or arrays as non-static local variables.  Use
-	 dynamic allocation with malloc() or palloc_get_page()
-	 instead.
+         large.  If a stack overflows, it will corrupt the thread
+         state.  Thus, kernel functions should not allocate large
+         structures or arrays as non-static local variables.  Use
+         dynamic allocation with malloc() or palloc_get_page()
+         instead.
 
    The first symptom of either of these problems will probably be
    an assertion failure in thread_current(), which checks that
@@ -89,6 +88,7 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
 struct thread {
   /* Owned by thread.c. */
   tid_t tid;                 /* Thread identifier. */
@@ -116,7 +116,6 @@ struct thread {
   /* MLFQ Scheduler Data Structures */
   /*
     Nice value for a thread. Ranges from NICE_MIN (-20) to NICE_MAX (+20)
-
     A higher nice value means the thread gives up its CPU time to other
     threads, a lower value means it takes away CPU time from others
    */
@@ -126,18 +125,13 @@ struct thread {
     Recent CPU - Store the amount of time a thread has used the CPU
     Maintain a moving average instead of simple values in order to give
     recent CPU usage a higher weight
-
     At every timer interrupt, we increment the recent_cpu for the running
     thread by 1
-
     Additionally, we recalculate the value of recent_cpu once every second
     for each thread with the below formula
     (Recalculate when timer_ticks % TIMER_FREQ = 0 since tests assume this)
-
     ```recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice```
-
     (Load avg is a global, which is also updated to reflect real CPU usage)
-
     We store 100 * recent_cpu to make it simpler to deal as an integer
   */
   int recent_cpu;
@@ -176,19 +170,17 @@ struct thread {
   struct file* executable_file; /* Pointer to the running executable file */
 };
 
-/* Element for list of files. Consists of integer file descriptor and file pointer */
+struct child_process {
+  int tid;
+  struct list_elem elem;
+  int exit_status;
+  bool did_execute;
+};
+
 struct process_file {
   int fd;
   struct file* fileptr;
   struct list_elem elem;
-};
-
-/* Structure for child process */
-struct child_process {
-  int tid;
-  int exit_status;
-  struct list_elem elem;
-  bool old;
 };
 
 /*
@@ -236,9 +228,6 @@ tid_t thread_create(const char* name, int priority, thread_func*, void*);
 void thread_block(void);
 void thread_unblock(struct thread*);
 
-void thread_sleep(void);
-void thread_wake(struct thread*);
-
 struct thread* thread_current(void);
 tid_t thread_tid(void);
 const char* thread_name(void);
@@ -258,7 +247,6 @@ void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 
-/* Create a global filesystem lock. We use it when doing filesys operations */
 struct lock global_filesystem_lock;
 
 #endif /* threads/thread.h */
