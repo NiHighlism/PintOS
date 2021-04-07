@@ -15,8 +15,6 @@
 #include "userprog/pagedir.h"
 
 void SYSCALL_exit_handler(int status) {
-  // printf("Exit : %s %d %d\n",thread_current()->name, thread_current()->tid,
-  // status);
   struct list_elem* e;
 
   for (e = list_begin(&thread_current()->parent->process_children);

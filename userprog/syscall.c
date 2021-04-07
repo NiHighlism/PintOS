@@ -14,8 +14,23 @@ static void syscall_handler(struct intr_frame*);
 
 extern bool running;
 
+/* Registers a new interrupt with the code 0x30, to be handled by the `syscall_handler` function */
 void syscall_init(void) { intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall"); }
 
+/*
+  Each syscall is handled in two parts - memory checking and syscall handling
+
+  Memory checking is done by checking if an address on the stack is a valid
+  address. Since PintOS reserves memory above PHYS_BASE as kernel memory, user processes
+  can't access it. This is the first check. The other check if making sure that the address
+  belongs to a valid page from the processes page directory
+
+  Once the addresses of all stack members are checked, a handler function is called, whose return
+  value (if any) is stored in the eax register of the interrupt frame. The kernel returns it to the
+  caller function in the user process once control returns to user mode from kernel mode
+
+  All  handler functions are defined in `userprog/handlers.c`
+*/
 static void syscall_handler(struct intr_frame* f) {
   int* p = f->esp;
 
