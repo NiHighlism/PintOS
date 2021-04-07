@@ -1,6 +1,8 @@
 #include "userprog/syscall.h"
 #include "list.h"
 #include "process.h"
+#include "devices/shutdown.h"
+#include "filesys/off_t.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -17,7 +19,7 @@ void syscall_init(void) { intr_register_int(0x30, 3, INTR_ON, syscall_handler, "
 static void syscall_handler(struct intr_frame* f) {
   int* p = f->esp;
 
-  is_valid_address(p);
+  is_valid_address((int*)p);
 
   int system_call = *p;
   switch (system_call) {
@@ -26,78 +28,78 @@ static void syscall_handler(struct intr_frame* f) {
       break;
 
     case SYS_EXIT:
-      is_valid_address(p + 1);
-      SYSCALL_exit_handler(*(p + 1));
+      is_valid_address((int*)p + 1);
+      SYSCALL_exit_handler((int)*(p + 1));
       break;
 
     case SYS_EXEC:
-      is_valid_address(p + 1);
-      is_valid_address(*(p + 1));
-      f->eax = SYSCALL_execute_handler(*(p + 1));
+      is_valid_address((int*)p + 1);
+      is_valid_address((int*)*(p + 1));
+      f->eax = SYSCALL_execute_handler((char*)*(p + 1));
       break;
 
     case SYS_WAIT:
-      is_valid_address(p + 1);
-      f->eax = SYSCALL_wait_handler(*(p + 1));
+      is_valid_address((int*)p + 1);
+      f->eax = SYSCALL_wait_handler((tid_t) * (p + 1));
       break;
 
     case SYS_CREATE:
-      is_valid_address(p + 5);
-      is_valid_address(*(p + 4));
+      is_valid_address((int*)p + 5);
+      is_valid_address((int*)*(p + 4));
 
-      f->eax = SYSCALL_create_handler(*(p + 4), *(p + 5));
+      f->eax = SYSCALL_create_handler((const char*)*(p + 4), (off_t) * (p + 5));
       break;
 
     case SYS_REMOVE:
-      is_valid_address(p + 1);
-      is_valid_address(*(p + 1));
+      is_valid_address((int*)p + 1);
+      is_valid_address((int*)*(p + 1));
 
-      f->eax = SYSCALL_remove_handler(*(p + 1));
+      f->eax = SYSCALL_remove_handler((const char*)*(p + 1));
       break;
 
     case SYS_OPEN:
-      is_valid_address(p + 1);
-      is_valid_address(*(p + 1));
+      is_valid_address((int*)p + 1);
+      is_valid_address((int*)*(p + 1));
 
-      f->eax = SYSCALL_open_handler(*(p + 1));
+      f->eax = SYSCALL_open_handler((const char*)*(p + 1));
       break;
 
     case SYS_FILESIZE:
-      is_valid_address(p + 1);
+      is_valid_address((int*)p + 1);
 
-      f->eax = SYSCALL_filesize_handler(*(p + 1));
+      f->eax = SYSCALL_filesize_handler((int)*(p + 1));
       break;
 
     case SYS_READ:
-      is_valid_address(p + 7);
-      is_valid_address(*(p + 6));
+      is_valid_address((int*)p + 7);
+      is_valid_address((int*)*(p + 6));
 
-      f->eax = SYSCALL_read_handler(*(p + 5), *(p + 6), *(p + 7));
+      f->eax = SYSCALL_read_handler((int)*(p + 5), (void*)*(p + 6), (unsigned int)*(p + 7));
       break;
 
     case SYS_WRITE:
-      is_valid_address(p + 7);
-      is_valid_address(*(p + 6));
+      is_valid_address((int*)p + 7);
+      is_valid_address((int*)*(p + 6));
 
-      f->eax = SYSCALL_write_handler(*(p + 5), *(p + 6), *(p + 7));
+      f->eax = SYSCALL_write_handler((int)*(p + 5), (const void*)*(p + 6), (unsigned int)*(p + 7));
       break;
 
     case SYS_SEEK:
-      is_valid_address(p + 5);
+      is_valid_address((int*)p + 5);
 
-      SYSCALL_seek_handler(*(p + 4), *(p + 5));
+      SYSCALL_seek_handler((int)*(p + 4), (off_t) * (p + 5));
       break;
 
     case SYS_TELL:
-      is_valid_address(p + 1);
+      is_valid_address((int*)p + 1);
 
-      SYSCALL_tell_handler(*(p + 1));
+      SYSCALL_tell_handler((int)*(p + 1));
       break;
 
     case SYS_CLOSE:
-      is_valid_address(p + 1);
+      is_valid_address((int*)p + 1);
 
-      SYSCALL_close_handler(*(p + 1));
+      SYSCALL_close_handler((int)*(p + 1));
       break;
   }
 }

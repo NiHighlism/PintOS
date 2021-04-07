@@ -9,6 +9,7 @@
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/switch.h"
 #include "threads/synch.h"
@@ -106,7 +107,8 @@ void thread_update_load_avg(void);
 int thread_mlfqs_get_highest_priority(void);
 
 /* For priority scheduling - Compare priorities of 2 threads */
-static bool thread_compare_priorities(struct list_elem* a, struct list_elem* b, void* aux UNUSED);
+static bool thread_compare_priorities(const struct list_elem* a, const struct list_elem* b,
+                                      void* aux UNUSED);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -367,9 +369,7 @@ void thread_exit(void) {
 
   /* Userprog Part 1 */
   while (!list_empty(&thread_current()->process_children)) {
-    struct file_proc* f =
-        list_entry(list_pop_front(&thread_current()->process_children), struct child_process, elem);
-    free(f);
+    list_pop_front(&thread_current()->process_children);
   }
   /* Userprog Part 1 */
 
@@ -796,7 +796,8 @@ int thread_mlfqs_get_highest_priority(void) {
   return -1;
 }
 
-static bool thread_compare_priorities(struct list_elem* a, struct list_elem* b, void* aux UNUSED) {
+static bool thread_compare_priorities(const struct list_elem* a, const struct list_elem* b,
+                                      void* aux UNUSED) {
   struct thread* t1 = list_entry(a, struct thread, elem);
   struct thread* t2 = list_entry(b, struct thread, elem);
 

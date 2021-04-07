@@ -19,4 +19,4 @@ off_t SYSCALL_tell_handler(int fd);
 void SYSCALL_close_handler(int fd);
 
 // Helper functions
-bool is_valid_address(const void* addr);
+bool is_valid_address(int* vaddr);

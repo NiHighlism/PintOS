@@ -253,7 +253,7 @@ struct Elf32_Phdr {
 #define PF_W 2 /* Writable. */
 #define PF_R 4 /* Readable. */
 
-static bool setup_stack(void** esp, char* cmdline);
+static bool setup_stack(void** esp, const char* cmdline);
 static bool validate_segment(const struct Elf32_Phdr*, struct file*);
 static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable);
@@ -475,7 +475,7 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
-static bool setup_stack(void** esp, char* file_name) {
+static bool setup_stack(void** esp, const char* file_name) {
   uint8_t* kpage;
   bool success = false;
 
@@ -492,7 +492,9 @@ static bool setup_stack(void** esp, char* file_name) {
   int argc = 0, i;
 
   char* copy = malloc(strlen(file_name) + 1);
+  char* tokenize_copy = malloc(strlen(file_name) + 1);
   strlcpy(copy, file_name, strlen(file_name) + 1);
+  strlcpy(tokenize_copy, file_name, strlen(file_name) + 1);
 
   for (token = strtok_r(copy, " ", &save_ptr); token != NULL;
        token = strtok_r(NULL, " ", &save_ptr))
@@ -500,12 +502,12 @@ static bool setup_stack(void** esp, char* file_name) {
 
   int* argv = calloc(argc, sizeof(int));
 
-  for (token = strtok_r(file_name, " ", &save_ptr), i = 0; token != NULL;
+  for (token = strtok_r(tokenize_copy, " ", &save_ptr), i = 0; token != NULL;
        token = strtok_r(NULL, " ", &save_ptr), i++) {
     *esp -= strlen(token) + 1;
     memcpy(*esp, token, strlen(token) + 1);
 
-    argv[i] = *esp;
+    argv[i] = (int)*esp;
   }
 
   while ((int)*esp % 4 != 0) {
@@ -524,7 +526,7 @@ static bool setup_stack(void** esp, char* file_name) {
     memcpy(*esp, &argv[i], sizeof(int));
   }
 
-  int pt = *esp;
+  int pt = (int)*esp;
   *esp -= sizeof(int);
   memcpy(*esp, &pt, sizeof(int));
 
@@ -535,6 +537,7 @@ static bool setup_stack(void** esp, char* file_name) {
   memcpy(*esp, &zero, sizeof(int));
 
   free(copy);
+  free(tokenize_copy);
   free(argv);
 
   return success;

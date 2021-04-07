@@ -2,6 +2,8 @@
 #include <debug.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+#include "devices/input.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "lib/kernel/list.h"
@@ -10,6 +12,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 
 void SYSCALL_exit_handler(int status) {
   // printf("Exit : %s %d %d\n",thread_current()->name, thread_current()->tid,
@@ -111,7 +114,7 @@ int SYSCALL_filesize_handler(int fd) {
 
 int SYSCALL_read_handler(int fd, void* buffer, unsigned size) {
   if (fd == STDIN_FD) {
-    int i;
+    unsigned i;
     uint8_t* buff = buffer;
 
     for (i = 0; i < size; i++)
@@ -210,13 +213,13 @@ void SYSCALL_close_handler(int fd) {
   lock_release(&global_filesystem_lock);
 }
 
-bool is_valid_address(const void* vaddr) {
+bool is_valid_address(int* vaddr) {
   if (!is_user_vaddr(vaddr)) {
     SYSCALL_exit_handler(-1);
     return false;
   }
 
-  void* ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
+  void* ptr = (void*)pagedir_get_page((uint32_t*)thread_current()->pagedir, vaddr);
   if (!ptr) {
     SYSCALL_exit_handler(-1);
     return false;
