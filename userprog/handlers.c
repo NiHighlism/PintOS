@@ -204,7 +204,7 @@ void SYSCALL_close_handler(int fd) {
     struct process_file* f = list_entry(e, struct process_file, elem);
     if (f->fd == fd) {
       file_close(f->fileptr);
-      // thread_current()->num_fd--;
+      thread_current()->num_fd--;
       list_remove(e);
     }
   }
